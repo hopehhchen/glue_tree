@@ -23,17 +23,23 @@ def parse(newick):
 
     return recurse()[0]
 
-names = []
-size = []
-parent = []
+# names = []
+# size = []
+# parent = []
 
-def extract_arrays(tree_structure):
+# def clear_arrays(names, size, parent):
+#     names.clear()
+#     size.clear()
+#     parent.clear()
+#     return names, size, parent
+
+def extract_arrays(tree_structure, names, parent, size):
     names.append(tree_structure['name'])
     parent.append(tree_structure['parentid'])
     size.append(tree_structure['length'])
     if tree_structure['children']:
         for sub_dicts in tree_structure['children']:
-            extract_arrays(sub_dicts)
+            extract_arrays(sub_dicts, names, parent, size)
 
 @data_factory('Newick data loader', is_newick, priority=10000)
 def read_newick(file_name):
@@ -43,9 +49,13 @@ def read_newick(file_name):
 
     # Open and parse newick file
     # convert newick file into parent array
+    names = []
+    size = []
+    parent = []
 
     newick_in = parse(newick_tree)
-    extract_arrays(newick_in)
+    # names, size, parent = clear_arrays(names, size, parent)
+    extract_arrays(newick_in, names, parent, size)
 
     if (size[0] == None):
         size[0] = 0
