@@ -9,7 +9,7 @@
    <item row="0" column="0">
     <widget class="QLabel" name="label_x">
      <property name="text">
-      <string>x attribute</string>
+      <string>parent</string>
      </property>
     </widget>
    </item>
@@ -19,7 +19,7 @@
    <item row="1" column="0">
     <widget class="QLabel" name="label_y">
      <property name="text">
-      <string>y attribute</string>
+      <string>height</string>
      </property>
     </widget>
    </item>

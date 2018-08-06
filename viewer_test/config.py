@@ -2,6 +2,8 @@ import os
 
 import numpy as np
 
+from matplotlib.collections import LineCollection
+
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QCheckBox
 
 from glue.config import qt_client
@@ -16,6 +18,8 @@ from glue.viewers.matplotlib.state import MatplotlibDataViewerState, MatplotlibL
 from glue.viewers.matplotlib.qt.data_viewer import MatplotlibDataViewer
 
 from glue.utils.qt import load_ui
+
+from dendro_helpers import dendro_layout
 
 
 class TutorialViewerState(MatplotlibDataViewerState):
@@ -54,7 +58,9 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 
         super(TutorialLayerArtist, self).__init__(axes, *args, **kwargs)
 
-        self.artist = self.axes.plot([], [], 'o', mec='none')[0]
+        #self.artist = self.axes.plot([], [], 'o', mec='none')[0]
+        self.lc = LineCollection([], color = 'k', linestyle = 'solid')
+        self.artist = self.axes.add_collection(self.lc)
         self.mpl_artists.append(self.artist)
 
         self.state.add_callback('fill', self._on_visual_change)
@@ -70,11 +76,11 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 
         self.artist.set_visible(self.state.visible)
         self.artist.set_zorder(self.state.zorder)
-        self.artist.set_markeredgecolor(self.state.color)
-        if self.state.fill:
-            self.artist.set_markerfacecolor(self.state.color)
-        else:
-            self.artist.set_markerfacecolor('white')
+        #self.artist.set_markeredgecolor(self.state.color)
+        # if self.state.fill:
+        #     self.artist.set_markerfacecolor(self.state.color)
+        # else:
+        #     self.artist.set_markerfacecolor('white')
         self.artist.set_alpha(self.state.alpha)
 
         self.redraw()
@@ -87,7 +93,15 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         x = self.state.layer[self._viewer_state.x_att]
         y = self.state.layer[self._viewer_state.y_att]
 
-        self.artist.set_data(x, y)
+        ###
+        verts = dendro_layout(x, y)
+
+        print(len(verts), type(verts))
+
+        #self.artist.set_data(x, y)
+        self.lc.set_segments(verts)
+
+
 
         self.axes.set_xlim(np.nanmin(x), np.nanmax(x))
         self.axes.set_ylim(np.nanmin(y), np.nanmax(y))
