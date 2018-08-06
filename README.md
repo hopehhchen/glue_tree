@@ -3,6 +3,9 @@ The repo is a forked version of the original created by [@chaityacshah](https://
 
 ## Progress
 * Jul-31-2018: Preliminary codes for plotting the tree from 1D arrays generated from a Newick file.
+* August 6, 2018: Basic working tree viewer with an option to rotate.
 
 ## To-do/to-discuss
-* Use `astrodendro` built-in plotter or generate similar 1D arrays from products?
+* Add rotation options and refactor existing code.
+* Linking & Brushing.
+* Change colors according to the subset.
