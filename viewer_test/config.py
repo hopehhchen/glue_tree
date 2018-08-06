@@ -35,6 +35,8 @@ class TutorialViewerState(MatplotlibDataViewerState):
         self.add_callback('x_att', self._on_attribute_change)
         self.add_callback('y_att', self._on_attribute_change)
 
+
+
     def _on_layers_change(self, value):
         self._x_att_helper.set_multiple_data(self.layers_data)
         self._y_att_helper.set_multiple_data(self.layers_data)
@@ -94,7 +96,8 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         y = self.state.layer[self._viewer_state.y_att]
 
         ###
-        verts = dendro_layout(x, y)
+        orientation = 'horizontal'
+        verts = dendro_layout(x, y, orientation = orientation)
 
         print(len(verts), type(verts))
 
@@ -102,9 +105,12 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self.lc.set_segments(verts)
 
 
-
-        self.axes.set_xlim(np.nanmin(x), np.nanmax(x))
-        self.axes.set_ylim(np.nanmin(y), np.nanmax(y))
+        if orientation == 'vertical':
+            self.axes.set_xlim(np.nanmin(x), np.nanmax(x))
+            self.axes.set_ylim(np.nanmin(y), np.nanmax(y))
+        elif orientation == 'horizontal':
+            self.axes.set_ylim(np.nanmin(x), np.nanmax(x))
+            self.axes.set_xlim(np.nanmin(y), np.nanmax(y))
 
         self.redraw()
 

@@ -3,7 +3,7 @@ import numpy as np
 from matplotlib.collections import LineCollection
 
 
-def dendro_layout(parent, height):
+def dendro_layout(parent, height, orientation = 'vertical'):
     '''
     Summarizing functions that outputs the line collectionself.
     '''
@@ -12,13 +12,12 @@ def dendro_layout(parent, height):
     children = calculate_children(parent, leafness)
 
     xpos = calculate_xpos(parent, leafness, children)
-    verts = calculate_verts(parent, height, leafness, xpos)
+    verts = calculate_verts(parent, height, leafness, xpos,
+                            orientation = orientation)
 
     line_collection = LineCollection(verts,
                                      colors = 'k',
                                      linestyle = 'solid')
-
-    verts
 
     #return line_collection
     return verts
@@ -100,7 +99,7 @@ def calculate_xpos(parent, leafness, children):
 
 
 
-def calculate_verts(parent, height, leafness, x_pos):
+def calculate_verts(parent, height, leafness, x_pos, orientation = 'vertical'):
 
     verts = []
 
@@ -137,4 +136,20 @@ def calculate_verts(parent, height, leafness, x_pos):
         verts.append(vert)
 
 
-    return verts
+    if orientation == 'vertical':
+        return verts
+
+    elif orientation == 'horizontal':
+
+        verts_rot = []
+
+        for vert in verts:
+
+            _cache = np.zeros(vert.shape)
+
+            _cache[:, 0] = vert[:, 1]
+            _cache[:, 1] = vert[:, 0]
+
+            verts_rot.append(_cache)
+
+        return verts_rot
