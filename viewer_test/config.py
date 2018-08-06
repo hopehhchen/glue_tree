@@ -156,5 +156,30 @@ class TutorialDataViewer(MatplotlibDataViewer):
     _data_artist_cls = TutorialLayerArtist
     _subset_artist_cls = TutorialLayerArtist
 
+    #####
+    tools = ['select:pick', 'select:rectangle']
+
+    # def __init__(self, *args, **kwargs):
+    #     super(TutorialDataViewer, self).__init__(*args, **kwargs)
+        # self.axes.set_xticks([])
+        # self.axes.spines['top'].set_visible(False)
+        # self.axes.spines['bottom'].set_visible(False)
+        #self.state.add_callback('_layout', self._update_limits)
+        #self._update_limits()
+
+
+    # def initialize_toolbar(self):
+    #     super(TutorialDataViewer, self).initialize_toolbar()
+
+        # def on_move(mode):
+        #     if mode._drag:
+        #         self.apply_roi(mode.roi())
+        #
+        # self.toolbar.tools['select:pick']._move_callback = on_move
+
+    # def close(self, *args, **kwargs):
+    #     self.toolbar.tools['select:pick']._move_callback = None
+    #     super(TutorialDataViewer, self).close(*args, **kwargs)
+
 
 qt_client.add(TutorialDataViewer)
