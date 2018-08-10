@@ -20,7 +20,7 @@ from glue.viewers.matplotlib.qt.data_viewer import MatplotlibDataViewer
 
 from glue.utils.qt import load_ui, fix_tab_widget_fontsize
 
-from dendro_helpers import dendro_layout
+from dendro_helpers import dendro_layout, calculate_nleaf
 
 
 class TutorialViewerState(MatplotlibDataViewerState):
@@ -38,7 +38,7 @@ class TutorialViewerState(MatplotlibDataViewerState):
         self.add_callback('layers', self._on_layers_change)
         self.add_callback('x_att', self._on_attribute_change)
         self.add_callback('y_att', self._on_attribute_change)
-        TutorialViewerState.orientation.set_choices(self, ['horizontal', 'vertical', 'left', 'right'])
+        TutorialViewerState.orientation.set_choices(self, ['bottom-up', 'left-right', 'top-down', 'right-left'])
         self.add_callback('orientation', self._on_attribute_change)
 
 
@@ -49,10 +49,10 @@ class TutorialViewerState(MatplotlibDataViewerState):
     def _on_attribute_change(self, value):
         if self.y_att is not None:
 
-            if self.orientation == 'vertical':
+            if (self.orientation == 'bottom-up') or (self.orientation == 'top-down'):
                 self.x_axislabel = ''
                 self.y_axislabel = self.y_att.label
-            elif self.orientation == 'horizontal':
+            elif (self.orientation == 'left-right') or (self.orientation == 'right-left'):
                 self.x_axislabel = self.y_att.label
                 self.y_axislabel = ''
 
@@ -110,18 +110,31 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         orientation = self._viewer_state.orientation
 
         verts = dendro_layout(x, y, orientation = orientation)
+        nleaf = calculate_nleaf(x)
 
 
         #self.artist.set_data(x, y)
         self.lc.set_segments(verts)
 
+        # parent
+        xmin = (-.5)
+        xmax = nleaf+1.5
+        # height
+        ymin = np.nanmin(y)-.05*(np.nanmax(y)-np.nanmin(y))
+        ymax = np.nanmax(y)+.05*(np.nanmax(y)-np.nanmin(y))
 
-        if orientation == 'vertical':
-            self.axes.set_xlim(np.nanmin(x), np.nanmax(x))
-            self.axes.set_ylim(np.nanmin(y), np.nanmax(y))
-        elif orientation == 'horizontal':
-            self.axes.set_ylim(np.nanmin(x), np.nanmax(x))
-            self.axes.set_xlim(np.nanmin(y), np.nanmax(y))
+        if orientation == 'bottom-up':
+            self.axes.set_xlim(xmin, xmax)
+            self.axes.set_ylim(ymin, ymax)
+        elif orientation == 'top-down':
+            self.axes.set_xlim(xmin, xmax)
+            self.axes.set_ylim(ymax, ymin)
+        elif orientation == 'left-right':
+            self.axes.set_ylim(xmin, xmax)
+            self.axes.set_xlim(ymin, ymax)
+        elif orientation == 'right-left':
+            self.axes.set_ylim(xmin, xmax)
+            self.axes.set_xlim(ymax, ymin)
 
         self.redraw()
 
