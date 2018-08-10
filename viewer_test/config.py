@@ -51,6 +51,8 @@ class TutorialViewerState(MatplotlibDataViewerState):
 class TutorialLayerState(MatplotlibLayerState):
     fill = CallbackProperty(False, docstring='Whether to show the markers as filled or not')
 
+    
+
 
 class TutorialLayerArtist(MatplotlibLayerArtist):
 
@@ -96,7 +98,7 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         y = self.state.layer[self._viewer_state.y_att]
 
         ###
-        orientation = 'horizontal'
+        orientation = 'vertical'
         verts = dendro_layout(x, y, orientation = orientation)
 
         print(len(verts), type(verts))
