@@ -4,7 +4,7 @@ import numpy as np
 
 from matplotlib.collections import LineCollection
 
-from qtpy.QtWidgets import QWidget, QVBoxLayout, QCheckBox
+from qtpy.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QButtonGroup, QRadioButton, QHBoxLayout
 
 from glue.config import qt_client
 from glue.core.data_combo_helper import ComponentIDComboHelper
@@ -26,6 +26,9 @@ class TutorialViewerState(MatplotlibDataViewerState):
 
     x_att = SelectionCallbackProperty(docstring='The attribute to use on the x-axis')
     y_att = SelectionCallbackProperty(docstring='The attribute to use on the y-axis')
+    # change to parent and height
+    # Tom is awesome!
+    orientation = SelectionCallbackProperty(docstring='The orientation ....')
 
     def __init__(self, *args, **kwargs):
         super(TutorialViewerState, self).__init__(*args, **kwargs)
@@ -34,7 +37,7 @@ class TutorialViewerState(MatplotlibDataViewerState):
         self.add_callback('layers', self._on_layers_change)
         self.add_callback('x_att', self._on_attribute_change)
         self.add_callback('y_att', self._on_attribute_change)
-
+        TutorialViewerState.orientation.set_choices(self, ['horizontal', 'vertical', 'left', 'right'])
 
 
     def _on_layers_change(self, value):
@@ -50,8 +53,6 @@ class TutorialViewerState(MatplotlibDataViewerState):
 
 class TutorialLayerState(MatplotlibLayerState):
     fill = CallbackProperty(False, docstring='Whether to show the markers as filled or not')
-
-    
 
 
 class TutorialLayerArtist(MatplotlibLayerArtist):
@@ -75,11 +76,13 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 
         self._viewer_state.add_callback('x_att', self._on_attribute_change)
         self._viewer_state.add_callback('y_att', self._on_attribute_change)
+        self._viewer_state.add_callback('orientation', self._on_attribute_change)
 
     def _on_visual_change(self, value=None):
 
         self.artist.set_visible(self.state.visible)
         self.artist.set_zorder(self.state.zorder)
+        # self.lc.set_color(self.state.color)
         #self.artist.set_markeredgecolor(self.state.color)
         # if self.state.fill:
         #     self.artist.set_markerfacecolor(self.state.color)
@@ -98,10 +101,10 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         y = self.state.layer[self._viewer_state.y_att]
 
         ###
-        orientation = 'vertical'
+        orientation = self._viewer_state.orientation
+
         verts = dendro_layout(x, y, orientation = orientation)
 
-        print(len(verts), type(verts))
 
         #self.artist.set_data(x, y)
         self.lc.set_segments(verts)
@@ -140,7 +143,28 @@ class TutorialLayerStateWidget(QWidget):
 
         super(TutorialLayerStateWidget, self).__init__()
 
-        self.checkbox = QCheckBox('Fill markers')
+
+        # was experimenting with radio buttons
+        # for orientation. doesn't work
+        # keeping it here for a while for future reference
+
+        # layout = QVBoxLayout()
+        #
+        # widget = QWidget(self)  # central widget
+        # widget.setLayout(layout)
+        #
+        # self.orientation_radio = QButtonGroup(widget)
+        #
+        # self.horizontal_radio = QRadioButton("Horizontal")
+        # self.orientation_radio.addButton(self.horizontal_radio)
+        # self.vertical_radio = QRadioButton("Vertical")
+        # self.vertical_radio.setChecked(True)
+        # self.orientation_radio.addButton(self.vertical_radio)
+        # layout.addWidget(self.horizontal_radio)
+        # layout.addWidget(self.vertical_radio)
+
+
+        self.checkbox = QCheckBox('Orientation')
         layout = QVBoxLayout()
         layout.addWidget(self.checkbox)
         self.setLayout(layout)
@@ -149,17 +173,46 @@ class TutorialLayerStateWidget(QWidget):
         connect_checkable_button(self.layer_state, 'fill', self.checkbox)
 
 
+
+
+
+from glue.config import viewer_tool
+from glue.viewers.common.qt.tool import CheckableTool
+
+@viewer_tool
+class MyCustomButton(CheckableTool):
+
+    icon = 'myicon.png'
+    tool_id = 'custom_tool'
+    action_text = 'Does cool stuff'
+    tool_tip = 'Does cool stuff'
+    status_tip = 'Instructions on what to do now'
+    shortcut = 'D'
+
+    def __init__(self, viewer):
+        super(MyCustomMode, self).__init__(viewer)
+
+    def activate(self):
+        pass
+
+    def deactivate(self):
+        pass
+
+    def close(self):
+        pass
+
 class TutorialDataViewer(MatplotlibDataViewer):
 
-    LABEL = 'Tutorial viewer'
+    LABEL = 'Tree Viewer'
     _state_cls = TutorialViewerState
     _options_cls = TutorialViewerStateWidget
     _layer_style_widget_cls = TutorialLayerStateWidget
     _data_artist_cls = TutorialLayerArtist
     _subset_artist_cls = TutorialLayerArtist
+    _tool = MyCustomButton
 
     #####
-    tools = ['select:pick', 'select:rectangle']
+    tools = ['select:rectangle']
 
     # def __init__(self, *args, **kwargs):
     #     super(TutorialDataViewer, self).__init__(*args, **kwargs)
