@@ -38,6 +38,7 @@ class TutorialViewerState(MatplotlibDataViewerState):
         self.add_callback('x_att', self._on_attribute_change)
         self.add_callback('y_att', self._on_attribute_change)
         TutorialViewerState.orientation.set_choices(self, ['horizontal', 'vertical', 'left', 'right'])
+        self.add_callback('orientation', self._on_attribute_change)
 
 
     def _on_layers_change(self, value):
@@ -45,10 +46,14 @@ class TutorialViewerState(MatplotlibDataViewerState):
         self._y_att_helper.set_multiple_data(self.layers_data)
 
     def _on_attribute_change(self, value):
-        if self.x_att is not None:
-            self.x_axislabel = self.x_att.label
         if self.y_att is not None:
-            self.y_axislabel = self.y_att.label
+
+            if self.orientation == 'vertical':
+                self.x_axislabel = ''
+                self.y_axislabel = self.y_att.label
+            elif self.orientation == 'horizontal':
+                self.x_axislabel = self.y_att.label
+                self.y_axislabel = ''
 
 
 class TutorialLayerState(MatplotlibLayerState):
