@@ -82,7 +82,7 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 
         self.artist.set_visible(self.state.visible)
         self.artist.set_zorder(self.state.zorder)
-        # self.lc.set_color(self.state.color)
+        self.lc.set_color(self.state.color)
         #self.artist.set_markeredgecolor(self.state.color)
         # if self.state.fill:
         #     self.artist.set_markerfacecolor(self.state.color)
@@ -173,6 +173,18 @@ class TutorialLayerStateWidget(QWidget):
         connect_checkable_button(self.layer_state, 'fill', self.checkbox)
 
 
+class TutorialLayerStyleEditor(QWidget):
+
+    def __init__(self, layer, parent=None):
+
+        super(TutorialLayerStyleEditor, self).__init__(parent=parent)
+
+        self.ui = load_ui('layer_style_editor.ui', self,
+                          directory=os.path.dirname(__file__))
+
+        connect_kwargs = {'alpha': dict(value_range=(0, 1))}
+
+        autoconnect_callbacks_to_qt(layer.state, self.ui, connect_kwargs)
 
 
 
@@ -210,6 +222,7 @@ class TutorialDataViewer(MatplotlibDataViewer):
     _data_artist_cls = TutorialLayerArtist
     _subset_artist_cls = TutorialLayerArtist
     _tool = MyCustomButton
+    _layer_style_widget_cls = TutorialLayerStyleEditor
 
     #####
     tools = ['select:rectangle']
