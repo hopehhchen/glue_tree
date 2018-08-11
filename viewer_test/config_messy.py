@@ -3,6 +3,8 @@ import os
 import numpy as np
 
 from matplotlib.collections import LineCollection
+import matplotlib.cm as cm
+import matplotlib.colors as mplcolors
 
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QButtonGroup, QRadioButton, QHBoxLayout
 
@@ -19,7 +21,7 @@ from glue.viewers.matplotlib.qt.data_viewer import MatplotlibDataViewer
 
 from glue.utils.qt import load_ui
 
-from dendro_helpers import dendro_layout, calculate_nleaf
+from dendro_helpers import dendro_layout, calculate_nleaf, sort1Darrays
 
 
 class TutorialViewerState(MatplotlibDataViewerState):
@@ -102,18 +104,52 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         if self._viewer_state.x_att is None or self._viewer_state.y_att is None:
             return
 
+        #parent
         x = self.state.layer[self._viewer_state.x_att]
+        #height
         y = self.state.layer[self._viewer_state.y_att]
 
         ###
         orientation = self._viewer_state.orientation
 
-        verts = dendro_layout(x, y, orientation = orientation)
+
+        ### sorty by
+        ##### sorby_array = None for using the orignal order
+        sortby_array = y ### sort by height
+        x, y = sort1Darrays(x, y, sortby_array)
+
+        verts, verts_horiz = dendro_layout(x, y, orientation = orientation)
         nleaf = calculate_nleaf(x)
 
 
+        ###  Fix the input!
+        color_code = 'linear'
+        color_code_by = y  ## height
+        color_code_cmap = cm.Reds
+
+        ####
+        if color_code == 'fixed':
+
+            verts_final = np.concatenate([verts, verts_horiz])
+            colors_final = list(np.ones(len(verts_final)))
+
+        elif color_code == 'linear':
+
+            cmap = color_code_cmap
+            normalize = mplcolors.Normalize(np.nanmin(y), np.nanmax(y))
+
+            colors = [cmap(normalize(yi)) for yi in y]
+            colors_horiz = []
+            for i in range(len(verts_horiz)):
+                colors_horiz.append((0., 0., 0., 1.))
+
+            verts_final = np.concatenate([verts, verts_horiz])
+
+            colors_final = np.concatenate([colors, colors_horiz])
+
         #self.artist.set_data(x, y)
-        self.lc.set_segments(verts)
+        self.lc.set_segments(verts_final)
+        self.lc.set_color(colors_final)
 
         # parent
         xmin = (-.5)
