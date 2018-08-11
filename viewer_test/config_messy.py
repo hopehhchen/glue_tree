@@ -13,13 +13,14 @@ from glue.core.data_combo_helper import ComponentIDComboHelper
 
 from glue.external.echo import CallbackProperty, SelectionCallbackProperty
 from glue.external.echo.qt import (connect_checkable_button,
-                                   autoconnect_callbacks_to_qt)
+                                   autoconnect_callbacks_to_qt,
+                                   connect_value)
 
 from glue.viewers.matplotlib.layer_artist import MatplotlibLayerArtist
 from glue.viewers.matplotlib.state import MatplotlibDataViewerState, MatplotlibLayerState
 from glue.viewers.matplotlib.qt.data_viewer import MatplotlibDataViewer
 
-from glue.utils.qt import load_ui
+from glue.utils.qt import load_ui, fix_tab_widget_fontsize
 
 from dendro_helpers import dendro_layout, calculate_nleaf, sort1Darrays
 
@@ -59,7 +60,7 @@ class TutorialViewerState(MatplotlibDataViewerState):
 
 
 class TutorialLayerState(MatplotlibLayerState):
-    fill = CallbackProperty(False, docstring='Whether to show the markers as filled or not')
+    linewidth = CallbackProperty(1, docstring='line width')
 
 
 class TutorialLayerArtist(MatplotlibLayerArtist):
@@ -75,11 +76,11 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self.artist = self.axes.add_collection(self.lc)
         self.mpl_artists.append(self.artist)
 
-        self.state.add_callback('fill', self._on_visual_change)
         self.state.add_callback('visible', self._on_visual_change)
         self.state.add_callback('zorder', self._on_visual_change)
         self.state.add_callback('color', self._on_visual_change)
         self.state.add_callback('alpha', self._on_visual_change)
+        self.state.add_callback('linewidth', self._on_visual_change)
 
         self._viewer_state.add_callback('x_att', self._on_attribute_change)
         self._viewer_state.add_callback('y_att', self._on_attribute_change)
@@ -90,6 +91,7 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self.artist.set_visible(self.state.visible)
         self.artist.set_zorder(self.state.zorder)
         self.lc.set_color(self.state.color)
+        self.lc.set_linewidth(self.state.linewidth)
         #self.artist.set_markeredgecolor(self.state.color)
         # if self.state.fill:
         #     self.artist.set_markerfacecolor(self.state.color)
@@ -109,7 +111,6 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         #height
         y = self.state.layer[self._viewer_state.y_att]
 
-        ###
         orientation = self._viewer_state.orientation
 
 
@@ -224,7 +225,6 @@ class TutorialLayerStateWidget(QWidget):
         self.setLayout(layout)
 
         self.layer_state = layer_artist.state
-        connect_checkable_button(self.layer_state, 'fill', self.checkbox)
 
 
 class TutorialLayerStyleEditor(QWidget):
@@ -239,6 +239,11 @@ class TutorialLayerStyleEditor(QWidget):
         connect_kwargs = {'alpha': dict(value_range=(0, 1))}
 
         autoconnect_callbacks_to_qt(layer.state, self.ui, connect_kwargs)
+
+
+
+
+
 
 
 
@@ -277,6 +282,7 @@ class TutorialDataViewer(MatplotlibDataViewer):
     _subset_artist_cls = TutorialLayerArtist
     _tool = MyCustomButton
     _layer_style_widget_cls = TutorialLayerStyleEditor
+    # _layer_style_widget_cls = ScatterLayerStyleEditor
 
     #####
     tools = ['select:rectangle']
