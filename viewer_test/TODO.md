@@ -6,7 +6,6 @@ Notes and to-do list for the developers of this tool:
 TODO:
 
 - Currently, some default color comes up after making initial plot (or after changing a parameter). Need to change it to black.
-- Need to add GUI option for sort by `parameter`.
 - Need to store depth/height of the tree. `depth` be used later.
 - Test the features integrated with data factory.
 - Test if data factory works for strings where no branch size is provided.

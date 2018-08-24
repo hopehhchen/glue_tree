@@ -7,32 +7,15 @@
     <x>0</x>
     <y>0</y>
     <width>195</width>
-    <height>104</height>
+    <height>134</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="1" column="0">
-    <widget class="QLabel" name="label_y">
-     <property name="text">
-      <string>height</string>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="1">
-    <widget class="QComboBox" name="combosel_y_att"/>
-   </item>
    <item row="0" column="1">
     <widget class="QComboBox" name="combosel_x_att"/>
-   </item>
-   <item row="0" column="0">
-    <widget class="QLabel" name="label_x">
-     <property name="text">
-      <string>parent</string>
-     </property>
-    </widget>
    </item>
    <item row="2" column="0">
     <widget class="QLabel" name="label">
@@ -43,6 +26,33 @@
    </item>
    <item row="2" column="1">
     <widget class="QComboBox" name="combosel_orientation"/>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="label_x">
+     <property name="text">
+      <string>parent</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="label_y">
+     <property name="text">
+      <string>height</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QComboBox" name="combosel_y_att"/>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="label_sort_by">
+     <property name="text">
+      <string>sort by</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QComboBox" name="combosel_sort_by"/>
    </item>
   </layout>
  </widget>

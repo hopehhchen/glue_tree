@@ -26,12 +26,12 @@ from dendro_helpers import dendro_layout, calculate_nleaf, sort1Darrays
 
 
 class TutorialViewerState(MatplotlibDataViewerState):
-
     x_att = SelectionCallbackProperty(docstring='The attribute to use on the x-axis')
     y_att = SelectionCallbackProperty(docstring='The attribute to use on the y-axis')
     # change to parent and height
     # Tom is awesome!
     orientation = SelectionCallbackProperty(docstring='The orientation ....')
+    sort_by = SelectionCallbackProperty(docstring='Sort by option ....')
 
     def __init__(self, *args, **kwargs):
         super(TutorialViewerState, self).__init__(*args, **kwargs)
@@ -42,7 +42,8 @@ class TutorialViewerState(MatplotlibDataViewerState):
         self.add_callback('y_att', self._on_attribute_change)
         TutorialViewerState.orientation.set_choices(self, ['bottom-up', 'left-right', 'top-down', 'right-left'])
         self.add_callback('orientation', self._on_attribute_change)
-
+        TutorialViewerState.sort_by.set_choices(self, ['parent', 'height'])
+        self.add_callback('sort_by', self._on_attribute_change)
 
     def _on_layers_change(self, value):
         self._x_att_helper.set_multiple_data(self.layers_data)
@@ -64,15 +65,14 @@ class TutorialLayerState(MatplotlibLayerState):
 
 
 class TutorialLayerArtist(MatplotlibLayerArtist):
-
     _layer_state_cls = TutorialLayerState
 
     def __init__(self, axes, *args, **kwargs):
 
         super(TutorialLayerArtist, self).__init__(axes, *args, **kwargs)
 
-        #self.artist = self.axes.plot([], [], 'o', mec='none')[0]
-        self.lc = LineCollection([], color = 'k', linestyle = 'solid')
+        # self.artist = self.axes.plot([], [], 'o', mec='none')[0]
+        self.lc = LineCollection([], color='k', linestyle='solid')
         self.artist = self.axes.add_collection(self.lc)
         self.mpl_artists.append(self.artist)
 
@@ -85,6 +85,7 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self._viewer_state.add_callback('x_att', self._on_attribute_change)
         self._viewer_state.add_callback('y_att', self._on_attribute_change)
         self._viewer_state.add_callback('orientation', self._on_attribute_change)
+        self._viewer_state.add_callback('sort_by', self._on_attribute_change)
 
     def _on_visual_change(self, value=None):
 
@@ -92,7 +93,7 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self.artist.set_zorder(self.state.zorder)
         self.lc.set_color(self.state.color)
         self.lc.set_linewidth(self.state.linewidth)
-        #self.artist.set_markeredgecolor(self.state.color)
+        # self.artist.set_markeredgecolor(self.state.color)
         # if self.state.fill:
         #     self.artist.set_markerfacecolor(self.state.color)
         # else:
@@ -106,29 +107,26 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         if self._viewer_state.x_att is None or self._viewer_state.y_att is None:
             return
 
-        #parent
+        # parent
         x = self.state.layer[self._viewer_state.x_att]
-        #height
+        # height
         y = self.state.layer[self._viewer_state.y_att]
 
         orientation = self._viewer_state.orientation
 
+        # sort_by_array = None for using the original order
+        # sort_by_array = y for sort by height
+        sort_by_array = self.state.layer[self._viewer_state.sort_by]
+        x, y = sort1Darrays(x, y, sort_by_array)
 
-        ### sorty by
-        ##### sorby_array = None for using the orignal order
-        sortby_array = y ### sort by height
-        x, y = sort1Darrays(x, y, sortby_array)
-
-        verts, verts_horiz = dendro_layout(x, y, orientation = orientation)
+        verts, verts_horiz = dendro_layout(x, y, orientation=orientation)
         nleaf = calculate_nleaf(x)
 
-
-        ###  Fix the input!
+        #  Fix the input!
         color_code = 'linear'
-        color_code_by = y  ## height
+        color_code_by = y  # height
         color_code_cmap = cm.Reds
 
-        ####
         if color_code == 'fixed':
 
             verts_final = np.concatenate([verts, verts_horiz])
@@ -148,16 +146,16 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 
             colors_final = np.concatenate([colors, colors_horiz])
 
-        #self.artist.set_data(x, y)
+        # self.artist.set_data(x, y)
         self.lc.set_segments(verts_final)
         self.lc.set_color(colors_final)
 
         # parent
         xmin = (-.5)
-        xmax = nleaf+1.5
+        xmax = nleaf + 1.5
         # height
-        ymin = np.nanmin(y)-.05*(np.nanmax(y)-np.nanmin(y))
-        ymax = np.nanmax(y)+.05*(np.nanmax(y)-np.nanmin(y))
+        ymin = np.nanmin(y) - .05 * (np.nanmax(y) - np.nanmin(y))
+        ymax = np.nanmax(y) + .05 * (np.nanmax(y) - np.nanmin(y))
 
         if orientation == 'bottom-up':
             self.axes.set_xlim(xmin, xmax)
@@ -182,7 +180,6 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 class TutorialViewerStateWidget(QWidget):
 
     def __init__(self, viewer_state=None, session=None):
-
         super(TutorialViewerStateWidget, self).__init__()
 
         self.ui = load_ui('viewer_state.ui', self,
@@ -195,9 +192,7 @@ class TutorialViewerStateWidget(QWidget):
 class TutorialLayerStateWidget(QWidget):
 
     def __init__(self, layer_artist):
-
         super(TutorialLayerStateWidget, self).__init__()
-
 
         # was experimenting with radio buttons
         # for orientation. doesn't work
@@ -218,7 +213,6 @@ class TutorialLayerStateWidget(QWidget):
         # layout.addWidget(self.horizontal_radio)
         # layout.addWidget(self.vertical_radio)
 
-
         self.checkbox = QCheckBox('Orientation')
         layout = QVBoxLayout()
         layout.addWidget(self.checkbox)
@@ -230,7 +224,6 @@ class TutorialLayerStateWidget(QWidget):
 class TutorialLayerStyleEditor(QWidget):
 
     def __init__(self, layer, parent=None):
-
         super(TutorialLayerStyleEditor, self).__init__(parent=parent)
 
         self.ui = load_ui('layer_style_editor.ui', self,
@@ -241,18 +234,12 @@ class TutorialLayerStyleEditor(QWidget):
         autoconnect_callbacks_to_qt(layer.state, self.ui, connect_kwargs)
 
 
-
-
-
-
-
-
 from glue.config import viewer_tool
 from glue.viewers.common.qt.tool import CheckableTool
 
+
 @viewer_tool
 class MyCustomButton(CheckableTool):
-
     icon = 'myicon.png'
     tool_id = 'custom_tool'
     action_text = 'Does cool stuff'
@@ -272,8 +259,8 @@ class MyCustomButton(CheckableTool):
     def close(self):
         pass
 
-class TutorialDataViewer(MatplotlibDataViewer):
 
+class TutorialDataViewer(MatplotlibDataViewer):
     LABEL = 'Tree Viewer'
     _state_cls = TutorialViewerState
     _options_cls = TutorialViewerStateWidget
@@ -289,21 +276,20 @@ class TutorialDataViewer(MatplotlibDataViewer):
 
     # def __init__(self, *args, **kwargs):
     #     super(TutorialDataViewer, self).__init__(*args, **kwargs)
-        # self.axes.set_xticks([])
-        # self.axes.spines['top'].set_visible(False)
-        # self.axes.spines['bottom'].set_visible(False)
-        #self.state.add_callback('_layout', self._update_limits)
-        #self._update_limits()
-
+    # self.axes.set_xticks([])
+    # self.axes.spines['top'].set_visible(False)
+    # self.axes.spines['bottom'].set_visible(False)
+    # self.state.add_callback('_layout', self._update_limits)
+    # self._update_limits()
 
     # def initialize_toolbar(self):
     #     super(TutorialDataViewer, self).initialize_toolbar()
 
-        # def on_move(mode):
-        #     if mode._drag:
-        #         self.apply_roi(mode.roi())
-        #
-        # self.toolbar.tools['select:pick']._move_callback = on_move
+    # def on_move(mode):
+    #     if mode._drag:
+    #         self.apply_roi(mode.roi())
+    #
+    # self.toolbar.tools['select:pick']._move_callback = on_move
 
     # def close(self, *args, **kwargs):
     #     self.toolbar.tools['select:pick']._move_callback = None
