@@ -171,11 +171,10 @@ def sort1Darrays(parent, height, sortby_array):
 
     if sortby_array is None:
         return parent, height
-    #
+
     leafness = calculate_leafness(parent)
     subtree = calculate_subtree(parent, leafness)
 
-    #
     iter_array = np.array(range(len(parent)))
 
     iter_array_updated = iter_array.copy()

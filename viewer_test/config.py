@@ -148,7 +148,9 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 
         # self.artist.set_data(x, y)
         self.lc.set_segments(verts_final)
-        self.lc.set_color(colors_final)
+        # uncomment the next line to
+        # turn on the colormap for vertical lines
+        # self.lc.set_color(colors_final)
 
         # parent
         xmin = (-.5)
@@ -269,18 +271,16 @@ class TutorialDataViewer(MatplotlibDataViewer):
     _subset_artist_cls = TutorialLayerArtist
     _tool = MyCustomButton
     _layer_style_widget_cls = TutorialLayerStyleEditor
-    # _layer_style_widget_cls = ScatterLayerStyleEditor
 
-    #####
     tools = ['select:rectangle']
 
-    # def __init__(self, *args, **kwargs):
-    #     super(TutorialDataViewer, self).__init__(*args, **kwargs)
-    # self.axes.set_xticks([])
-    # self.axes.spines['top'].set_visible(False)
-    # self.axes.spines['bottom'].set_visible(False)
-    # self.state.add_callback('_layout', self._update_limits)
-    # self._update_limits()
+    def __init__(self, *args, **kwargs):
+        super(TutorialDataViewer, self).__init__(*args, **kwargs)
+        self.axes.set_xticks([])
+        self.axes.spines['top'].set_visible(False)
+        self.axes.spines['bottom'].set_visible(False)
+        # self.state.add_callback('_layout', self._update_limits)
+        # self._update_limits()
 
     # def initialize_toolbar(self):
     #     super(TutorialDataViewer, self).initialize_toolbar()

@@ -5,8 +5,6 @@ Notes and to-do list for the developers of this tool:
 
 TODO:
 
-- Currently, some default color comes up after making initial plot (or after changing a parameter). Need to change it to black.
 - Need to store depth/height of the tree. `depth` be used later.
-- Test the features integrated with data factory.
-- Test if data factory works for strings where no branch size is provided.
-
+- Test the features integrated with data factory - fails. Height isn't mapped. Will be fixed tomorrow.
+- log scale? think about all 4 orientations
