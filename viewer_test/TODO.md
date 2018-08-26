@@ -6,5 +6,5 @@ Notes and to-do list for the developers of this tool:
 TODO:
 
 - Need to store depth/height of the tree. `depth` be used later.
-- Test the features integrated with data factory - fails. Height isn't mapped. Will be fixed tomorrow.
-- log scale? think about all 4 orientations
+- Tested with data factory integrated. However, the standalone factory installed earlier didn't show any output recently. Need to check again.
+- `log` scale? think about all 4 orientations

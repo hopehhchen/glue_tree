@@ -25,6 +25,137 @@ from glue.utils.qt import load_ui, fix_tab_widget_fontsize
 from dendro_helpers import dendro_layout, calculate_nleaf, sort1Darrays
 
 
+
+
+
+
+
+
+
+
+
+
+# TODO
+# move this back to data factory part
+# works as of now :)
+"""
+adding data factory part here
+to do 'kind of' integration testing
+"""
+
+
+from glue.config import data_factory
+from glue.core import Data
+import numpy as np
+import re
+
+
+def is_newick(filename, **kwargs):
+    return filename.endswith('.nwk')
+
+
+def parse(newick):
+    tokens = re.findall(r"([^:;,()\s]*)(?:\s*:\s*([\d.]+)\s*)?([,);])|(\S)", newick+";")
+
+    def recurse(nextid = 0, parentid = -1): # one node
+        thisid = nextid;
+        children = []
+        name, length, delim, ch = tokens.pop(0)
+        if ch == "(":
+            while ch in "(,":
+                node, ch, nextid = recurse(nextid+1, thisid)
+                children.append(node)
+            name, length, delim, ch = tokens.pop(0)
+
+        return {"id": thisid, "name": name, "length": float(length) if length else None,
+                "parentid": parentid, "children": children}, delim, nextid
+
+    return recurse()[0]
+
+# names = []
+# size = []
+# parent = []
+
+# def clear_arrays(names, size, parent):
+#     names.clear()
+#     size.clear()
+#     parent.clear()
+#     return names, size, parent
+
+
+def extract_arrays(tree_structure, names, parent, size):
+    names.append(tree_structure['name'])
+    parent.append(tree_structure['parentid'])
+    size.append(tree_structure['length'])
+    if tree_structure['children']:
+        for sub_dicts in tree_structure['children']:
+            extract_arrays(sub_dicts, names, parent, size)
+
+
+@data_factory('Newick data loader', is_newick, priority=10000)
+def read_newick(file_name):
+
+    with open(file_name, 'r') as f:
+        newick_tree = f.readline()
+
+    # Open and parse newick file
+    # convert newick file into parent array
+    names = []
+    size = []
+    parent = []
+
+    newick_in = parse(newick_tree)
+    # names, size, parent = clear_arrays(names, size, parent)
+    extract_arrays(newick_in, names, parent, size)
+
+    # TODO
+    # optimize this
+    # currently storing everything in a
+    # test object and then
+    # using the test object to calculate height
+
+    if (size[0] == None):
+        size[0] = 0
+
+    data = Data(label='newick file')
+    data['parent'] = parent
+    data['names'] = names
+    data['size'] = size
+
+    heights = np.zeros(len(data['parent']))
+    idx = np.array(range(len(data['parent'])))
+
+    for pix in idx:
+        heights[idx[(data['parent'] == pix)]] += (data['size'][pix] + heights[pix])
+
+    heights = heights + data['size']
+
+    print("h= ", heights)
+
+    data['height'] = heights
+
+    # data = Data(label='newick file')
+    # data['parent'] = parent
+    # data['names'] = names
+    # data['size'] = size
+    # data['height'] = [0,0.1,0.2,0.5,0.8,.9,.35,.6,.75,.85,.9,0.25,.3,.4,.5]
+
+    return data
+
+
+"""
+end of data factory part
+"""
+
+
+
+
+
+
+
+
+
+
 class TutorialViewerState(MatplotlibDataViewerState):
     x_att = SelectionCallbackProperty(docstring='The attribute to use on the x-axis')
     y_att = SelectionCallbackProperty(docstring='The attribute to use on the y-axis')
