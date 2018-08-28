@@ -130,8 +130,6 @@ def read_newick(file_name):
 
     heights = heights + data['size']
 
-    print("h= ", heights)
-
     data['height'] = heights
 
     # data = Data(label='newick file')
@@ -287,21 +285,111 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         xmin = (-.5)
         xmax = nleaf + 1.5
         # height
-        ymin = np.nanmin(y) - .05 * (np.nanmax(y) - np.nanmin(y))
-        ymax = np.nanmax(y) + .05 * (np.nanmax(y) - np.nanmin(y))
+        ymin, ymax = np.nanmin(y), np.nanmax(y)
+
+        # y_log = True
+        # if y_log:
+        #
+        #     ymin = np.min(y[y > 0.])
+        #     ###
+        #     ymin = np.exp(np.log(ymin)-.05*(np.log(ymax) - np.log(ymin)))
+        #     ymax = np.exp(np.log(ymax)+.05*(np.log(ymax) - np.log(ymin)))
+        #
+        # else:
+        #
+        #     ymin = ymin - .05 * (ymax - ymin)
+        #     ymax = ymax + .05 * (ymax - ymin)
+
+        ymin = ymin - .05 * (ymax - ymin)
+        ymax = ymax + .05 * (ymax - ymin)
+
+        self.axes.set_xscale('linear')
+        self.axes.set_yscale('linear')
 
         if orientation == 'bottom-up':
             self.axes.set_xlim(xmin, xmax)
             self.axes.set_ylim(ymin, ymax)
+
+            self.axes.tick_params(bottom = False,
+                                  top = False,
+                                  left = True,
+                                  right = False,
+                                  labelbottom = False,
+                                  labeltop = False,
+                                  labelleft = True,
+                                  labelright = False)
+            self.axes.spines['top'].set_visible(False)
+            self.axes.spines['bottom'].set_visible(False)
+            self.axes.spines['left'].set_visible(True)
+            self.axes.spines['right'].set_visible(True)
+
+            # if y_log:
+            #
+            #     self.axes.set_yscale('log')
+
         elif orientation == 'top-down':
             self.axes.set_xlim(xmin, xmax)
             self.axes.set_ylim(ymax, ymin)
+
+            self.axes.tick_params(bottom = False,
+                                  top = False,
+                                  left = True,
+                                  right = False,
+                                  labelbottom = False,
+                                  labeltop = False,
+                                  labelleft = True,
+                                  labelright = False)
+            self.axes.spines['top'].set_visible(False)
+            self.axes.spines['bottom'].set_visible(False)
+            self.axes.spines['left'].set_visible(True)
+            self.axes.spines['right'].set_visible(True)
+
+            # if y_log:
+            #
+            #     self.axes.set_yscale('log')
+
         elif orientation == 'left-right':
             self.axes.set_ylim(xmin, xmax)
             self.axes.set_xlim(ymin, ymax)
+
+            self.axes.tick_params(bottom = True,
+                                  top = False,
+                                  left = False,
+                                  right = False,
+                                  labelbottom = True,
+                                  labeltop = False,
+                                  labelleft = False,
+                                  labelright = False)
+            self.axes.spines['top'].set_visible(True)
+            self.axes.spines['bottom'].set_visible(True)
+            self.axes.spines['left'].set_visible(False)
+            self.axes.spines['right'].set_visible(False)
+
+            # if y_log:
+            #
+            #     self.axes.set_xscale('log')
+
         elif orientation == 'right-left':
             self.axes.set_ylim(xmin, xmax)
             self.axes.set_xlim(ymax, ymin)
+
+            self.axes.tick_params(bottom = True,
+                                  top = False,
+                                  left = False,
+                                  right = False,
+                                  labelbottom = True,
+                                  labeltop = False,
+                                  labelleft = False,
+                                  labelright = False)
+            self.axes.spines['top'].set_visible(True)
+            self.axes.spines['bottom'].set_visible(True)
+            self.axes.spines['left'].set_visible(False)
+            self.axes.spines['right'].set_visible(False)
+
+            # if y_log:
+            #
+            #     self.axes.set_xscale('log')
+
 
         self.redraw()
 
@@ -403,13 +491,11 @@ class TutorialDataViewer(MatplotlibDataViewer):
     _tool = MyCustomButton
     _layer_style_widget_cls = TutorialLayerStyleEditor
 
-    tools = ['select:rectangle']
+    tools = ['select:rectangle', 'select:pick']
 
     def __init__(self, *args, **kwargs):
         super(TutorialDataViewer, self).__init__(*args, **kwargs)
-        self.axes.set_xticks([])
-        self.axes.spines['top'].set_visible(False)
-        self.axes.spines['bottom'].set_visible(False)
+
         # self.state.add_callback('_layout', self._update_limits)
         # self._update_limits()
 
