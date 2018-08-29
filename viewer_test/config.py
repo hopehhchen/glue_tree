@@ -1,4 +1,5 @@
 import os
+from operator import itemgetter
 
 import numpy as np
 
@@ -8,23 +9,46 @@ import matplotlib.colors as mplcolors
 
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QButtonGroup, QRadioButton, QHBoxLayout
 
-from glue.config import qt_client
+from glue.config import qt_client, colormaps
 from glue.core.data_combo_helper import ComponentIDComboHelper
 
-from glue.external.echo import CallbackProperty, SelectionCallbackProperty
+from glue.external.echo import (CallbackProperty,
+                                SelectionCallbackProperty,
+                                delay_callback)
 from glue.external.echo.qt import (connect_checkable_button,
                                    autoconnect_callbacks_to_qt,
                                    connect_value)
 
 from glue.viewers.matplotlib.layer_artist import MatplotlibLayerArtist
-from glue.viewers.matplotlib.state import MatplotlibDataViewerState, MatplotlibLayerState
+from glue.viewers.matplotlib.state import (MatplotlibDataViewerState,
+                                           MatplotlibLayerState,
+                                           DeferredDrawCallbackProperty as DDCProperty,
+                                           DeferredDrawSelectionCallbackProperty as DDSCProperty)
 from glue.viewers.matplotlib.qt.data_viewer import MatplotlibDataViewer
 
-from glue.utils.qt import load_ui, fix_tab_widget_fontsize
+from glue.utils.qt import load_ui, fix_tab_widget_fontsize, messagebox_on_error
+from glue.utils import defer_draw
 
-from dendro_helpers import dendro_layout, calculate_nleaf, sort1Darrays
+from dendro_helpers import (dendro_layout,
+                            calculate_nleaf,
+                            sort1Darrays,
+                            _substructures,
+                            calculate_leafness,
+                            calculate_children,
+                            calculate_subtree,
+                            calculate_xpos)
+
+from glue.core.roi import PointROI, RectangularROI, XRangeROI, YRangeROI
+from glue.core.subset import CategorySubsetState
+from glue.core.exceptions import IncompatibleDataException
+from glue.core.subset import Subset
+
+from glue.plugins.dendro_viewer.compat import update_dendrogram_viewer_state
 
 
+
+CMAP_PROPERTIES = set(['cmap_mode', 'cmap_att', 'cmap_vmin', 'cmap_vmax', 'cmap'])
+DATA_PROPERTIES = set(['layer', 'x_att', 'y_att', 'cmap_mode'])
 
 
 
@@ -155,12 +179,15 @@ end of data factory part
 
 
 class TutorialViewerState(MatplotlibDataViewerState):
+    # x is parent; y is height.
     x_att = SelectionCallbackProperty(docstring='The attribute to use on the x-axis')
     y_att = SelectionCallbackProperty(docstring='The attribute to use on the y-axis')
     # change to parent and height
     # Tom is awesome!
     orientation = SelectionCallbackProperty(docstring='The orientation ....')
     sort_by = SelectionCallbackProperty(docstring='Sort by option ....')
+    select_substruct = DDCProperty(True)
+
 
     def __init__(self, *args, **kwargs):
         super(TutorialViewerState, self).__init__(*args, **kwargs)
@@ -189,8 +216,34 @@ class TutorialViewerState(MatplotlibDataViewerState):
                 self.y_axislabel = ''
 
 
+
+
 class TutorialLayerState(MatplotlibLayerState):
+
     linewidth = CallbackProperty(1, docstring='line width')
+    cmap_mode = DDSCProperty(docstring="Whether to use color to encode an attribute")
+    cmap_att = DDSCProperty(docstring="The attribute to use for the color")
+    cmap_vmin = DDCProperty(docstring="The lower level for the colormap")
+    cmap_vmax = DDCProperty(docstring="The upper level for the colormap")
+    cmap = DDCProperty(docstring="The colormap to use (when in colormap mode)")
+
+    def __init__(self, viewer_state=None, layer=None, **kwargs):
+        super(TutorialLayerState, self).__init__(viewer_state=viewer_state, layer=layer)
+
+        TutorialLayerState.cmap_mode.set_choices(self, ['Fixed', 'Linear'])
+
+        self.cmap_att_helper = ComponentIDComboHelper(self, 'cmap_att',
+                                                      numeric = True, categorical = False)
+        self.add_callback('layer', self._on_layers_change)
+        self._on_layers_change()
+
+    def _on_layers_change(self, layer=None):
+
+        with delay_callback(self, 'cmap_vmin', 'cmap_vmax'):
+
+            self.cmap_att_helper.set_multiple_data([self.layer])
+
+            self.cmap = colormaps.members[0][1]
 
 
 class TutorialLayerArtist(MatplotlibLayerArtist):
@@ -210,17 +263,71 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self.state.add_callback('color', self._on_visual_change)
         self.state.add_callback('alpha', self._on_visual_change)
         self.state.add_callback('linewidth', self._on_visual_change)
+        #
+        self.state.add_callback('cmap_mode', self._on_visual_change)
+        self.state.add_callback('cmap_att', self._on_visual_change)
+        self.state.add_callback('cmap_vmin', self._on_visual_change)
+        self.state.add_callback('cmap_vmax', self._on_visual_change)
+        self.state.add_callback('cmap', self._on_visual_change)
 
         self._viewer_state.add_callback('x_att', self._on_attribute_change)
         self._viewer_state.add_callback('y_att', self._on_attribute_change)
         self._viewer_state.add_callback('orientation', self._on_attribute_change)
         self._viewer_state.add_callback('sort_by', self._on_attribute_change)
 
+
+
     def _on_visual_change(self, value=None):
+
+        # parent
+        x = self.state.layer.data[self._viewer_state.x_att]
+        # height
+        y = self.state.layer.data[self._viewer_state.y_att]
+        if len(self.state.layer[self._viewer_state.x_att]) == 0:
+            return
+        orientation = self._viewer_state.orientation
+        sort_by_array = self.state.layer.data[self._viewer_state.sort_by]
+        x, y, iter_array_updated = sort1Darrays(x, y, sort_by_array)
+        verts, verts_horiz = dendro_layout(x, y, orientation=orientation)
+
 
         self.artist.set_visible(self.state.visible)
         self.artist.set_zorder(self.state.zorder)
-        self.lc.set_color(self.state.color)
+
+        ## set colors
+        if self.state.cmap_mode is not None:
+            color_code = self.state.cmap_mode
+            color_code_by = self.state.layer.data[self.state.cmap_att]
+            color_code_by = color_code_by[iter_array_updated]
+            color_code_cmap = self.state.cmap
+            color_code_vmin = self.state.cmap_vmin
+            color_code_vmax = self.state.cmap_vmax
+        else:
+            color_code = 'Fixed'
+
+
+        if color_code == 'Fixed':
+
+            colors_final = self.state.color
+
+        elif color_code == 'Linear':
+
+            cmap = color_code_cmap
+            normalize = mplcolors.Normalize(color_code_vmin, color_code_vmax)
+
+            print(cmap, color_code_vmin, color_code_vmax, color_code_by)
+
+            colors = [cmap(normalize(yi)) for yi in color_code_by]
+            colors_horiz = []
+            for i in range(len(verts_horiz)):
+                colors_horiz.append((0., 0., 0., 1.))
+
+            colors_final = np.concatenate([colors, colors_horiz])
+
+        self.lc.set_color(colors_final)
+
+
+        ## linewidth
         self.lc.set_linewidth(self.state.linewidth)
         # self.artist.set_markeredgecolor(self.state.color)
         # if self.state.fill:
@@ -237,55 +344,77 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
             return
 
         # parent
-        x = self.state.layer[self._viewer_state.x_att]
+        x = self.state.layer.data[self._viewer_state.x_att]
         # height
-        y = self.state.layer[self._viewer_state.y_att]
+        y = self.state.layer.data[self._viewer_state.y_att]
+
+        if len(self.state.layer[self._viewer_state.x_att]) == 0:
+            return
+
+        leafness = calculate_leafness(x)
+
 
         orientation = self._viewer_state.orientation
 
         # sort_by_array = None for using the original order
         # sort_by_array = y for sort by height
-        sort_by_array = self.state.layer[self._viewer_state.sort_by]
-        x, y = sort1Darrays(x, y, sort_by_array)
+        sort_by_array = self.state.layer.data[self._viewer_state.sort_by]
+        x, y, iter_array_updated = sort1Darrays(x, y, sort_by_array)
 
         verts, verts_horiz = dendro_layout(x, y, orientation=orientation)
+        if isinstance(self.state.layer, Subset):
+            subset_mask = self.state.layer.to_index_list()
+            subset_mask = np.array([ID in subset_mask for ID in iter_array_updated])
+            subset_mask = np.where(subset_mask)[0]
+            verts = itemgetter(*subset_mask)(verts)
+            #id_horiz = np.where([ID in np.where(np.array(leafness) == 'branch')[0] for ID in subset_mask])[0]
+            #id_horiz = np.where((subset_mask in id_horiz))
+            verts_horiz = []
+
+        verts = verts if (np.ndim(verts) == 3.) else [verts]
+        #verts_horiz = verts_horiz if (np.ndim(verts_horiz) == 3.) else [verts_horiz]
+
         nleaf = calculate_nleaf(x)
 
-        #  Fix the input!
-        color_code = 'linear'
-        color_code_by = y  # height
-        color_code_cmap = cm.Reds
-
-        if color_code == 'fixed':
-
+        if len(verts_horiz) != 0.:
             verts_final = np.concatenate([verts, verts_horiz])
-            colors_final = list(np.ones(len(verts_final)))
+        else:
+            verts_final = verts
 
-        elif color_code == 'linear':
+
+        if self.state.cmap_mode is 'Linear':
+            color_code = self.state.cmap_mode
+            color_code_by = self.state.layer.data[self.state.cmap_att]
+            color_code_by = color_code_by[iter_array_updated]
+            color_code_cmap = self.state.cmap
+            color_code_vmin = self.state.cmap_vmin
+            color_code_vmax = self.state.cmap_vmax
+
 
             cmap = color_code_cmap
-            normalize = mplcolors.Normalize(np.nanmin(y), np.nanmax(y))
+            normalize = mplcolors.Normalize(color_code_vmin, color_code_vmax)
 
-            colors = [cmap(normalize(yi)) for yi in y]
+            print(cmap, color_code_vmin, color_code_vmax, color_code_by)
+
+            colors = [cmap(normalize(yi)) for yi in color_code_by]
             colors_horiz = []
             for i in range(len(verts_horiz)):
                 colors_horiz.append((0., 0., 0., 1.))
 
-            verts_final = np.concatenate([verts, verts_horiz])
-
             colors_final = np.concatenate([colors, colors_horiz])
+
+            self.lc.set_color(colors_final)
 
         # self.artist.set_data(x, y)
         self.lc.set_segments(verts_final)
-        # uncomment the next line to
-        # turn on the colormap for vertical lines
-        # self.lc.set_color(colors_final)
+
 
         # parent
         xmin = (-.5)
         xmax = nleaf + 1.5
         # height
         ymin, ymax = np.nanmin(y), np.nanmax(y)
+
 
         # y_log = True
         # if y_log:
@@ -444,15 +573,188 @@ class TutorialLayerStateWidget(QWidget):
 
 class TutorialLayerStyleEditor(QWidget):
 
+    # def __init__(self, layer, parent=None):
+    #     super(TutorialLayerStyleEditor, self).__init__(parent=parent)
+
+    #     self.ui = load_ui('layer_style_editor.ui', self,
+    #                       directory=os.path.dirname(__file__))
+
+    #     connect_kwargs = {'alpha': dict(value_range=(0, 1))}
+
+    #     autoconnect_callbacks_to_qt(layer.state, self.ui, connect_kwargs)
+
     def __init__(self, layer, parent=None):
+
         super(TutorialLayerStyleEditor, self).__init__(parent=parent)
 
         self.ui = load_ui('layer_style_editor.ui', self,
                           directory=os.path.dirname(__file__))
 
         connect_kwargs = {'alpha': dict(value_range=(0, 1))}
-
+                          # 'size_scaling': dict(value_range=(0.1, 10), log=True),
+                          # 'density_contrast': dict(value_range=(0, 1)),
+                          # 'vector_scaling': dict(value_range=(0.1, 10), log=True)
         autoconnect_callbacks_to_qt(layer.state, self.ui, connect_kwargs)
+
+        # connect_value(layer.state.viewer_state, 'dpi', self.ui.value_dpi,
+        #               value_range=(12, 144), log=True)
+
+        fix_tab_widget_fontsize(self.ui.tab_widget)
+
+        self.layer_state = layer.state
+
+        # self.layer_state.add_callback('markers_visible', self._update_markers_visible)
+        # self.layer_state.add_callback('line_visible', self._update_line_visible)
+        # self.layer_state.add_callback('xerr_visible', self._update_xerr_visible)
+        # self.layer_state.add_callback('yerr_visible', self._update_yerr_visible)
+        # self.layer_state.add_callback('vector_visible', self._update_vectors_visible)
+
+        self.layer_state.add_callback('cmap_mode', self._update_cmap_mode)
+        # self.layer_state.add_callback('size_mode', self._update_size_mode)
+        # self.layer_state.add_callback('vector_mode', self._update_vector_mode)
+
+        # self.layer_state.add_callback('density_map', self._update_size_mode)
+        # self.layer_state.add_callback('density_map', self._update_warnings)
+
+        self.layer_state.add_callback('layer', self._update_warnings)
+
+        # self._update_markers_visible()
+        # self._update_line_visible()
+        # self._update_xerr_visible()
+        # self._update_yerr_visible()
+        # self._update_vectors_visible()
+
+        # self._update_size_mode()
+        # self._update_vector_mode()
+        self._update_cmap_mode()
+
+        self._update_warnings()
+
+    def _update_warnings(self, *args):
+
+        if self.layer_state.layer is None:
+            n_points = 0
+        else:
+            n_points = np.product(self.layer_state.layer.shape)
+
+        warning = " (may be slow given data size)"
+
+        for combo, threshold in [(self.ui.combosel_cmap_mode, 50000)]:
+
+            if n_points > threshold and not self.layer_state.density_map:
+                for item in range(combo.count()):
+                    text = combo.itemText(item)
+                    if text != 'Fixed':
+                        combo.setItemText(item, text + warning)
+                        combo.setItemData(item, QtGui.QBrush(Qt.red), Qt.TextColorRole)
+            else:
+                for item in range(combo.count()):
+                    text = combo.itemText(item)
+                    if text != 'Fixed':
+                        if warning in text:
+                            combo.setItemText(item, text.replace(warning, ''))
+                            combo.setItemData(item, QtGui.QBrush(), Qt.TextColorRole)
+
+        # if n_points > 10000:
+        #     self.ui.label_warning_errorbar.show()
+        # else:
+        #     self.ui.label_warning_errorbar.hide()
+
+        # if n_points > 10000:
+        #     self.ui.label_warning_vector.show()
+        # else:
+        #     self.ui.label_warning_vector.hide()
+
+    # def _update_size_mode(self, size_mode=None):
+
+    #     visible = not self.layer_state.density_map and not self.layer_state.size_mode == 'Fixed'
+    #     self.ui.label_size_attribute.setVisible(visible)
+    #     self.ui.combosel_size_att.setVisible(visible)
+    #     self.ui.label_size_limits.setVisible(visible)
+    #     self.ui.valuetext_size_vmin.setVisible(visible)
+    #     self.ui.valuetext_size_vmax.setVisible(visible)
+    #     self.ui.button_flip_size.setVisible(visible)
+
+    #     visible = not self.layer_state.density_map and self.layer_state.size_mode == 'Fixed'
+    #     self.ui.value_size.setVisible(visible)
+
+    #     density = self.layer_state.density_map
+    #     # self.ui.value_dpi.setVisible(density)
+    #     # self.ui.label_dpi.setVisible(density)
+    #     self.ui.label_stretch.setVisible(density)
+    #     self.ui.combosel_stretch.setVisible(density)
+    #     self.ui.value_density_contrast.setVisible(density)
+    #     self.ui.label_contrast.setVisible(density)
+    #     self.ui.combosel_size_mode.setVisible(not density)
+    #     self.ui.value_size_scaling.setVisible(not density)
+    #     self.ui.label_size_mode.setVisible(not density)
+    #     self.ui.label_size_scaling.setVisible(not density)
+    #     self.ui.label_fill.setVisible(not density)
+    #     self.ui.bool_fill.setVisible(not density)
+
+    # def _update_markers_visible(self, *args):
+    #     self.ui.combosel_size_mode.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.value_size.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.combosel_size_att.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.valuetext_size_vmin.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.valuetext_size_vmax.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.button_flip_size.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.value_size_scaling.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.value_dpi.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.combosel_stretch.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.label_size_scaling.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.combosel_points_mode.setEnabled(self.layer_state.markers_visible)
+    #     self.ui.value_density_contrast.setEnabled(self.layer_state.markers_visible)
+
+    def _update_line_visible(self, *args):
+        self.ui.value_linewidth.setEnabled(self.layer_state.line_visible)
+        self.ui.combosel_linestyle.setEnabled(self.layer_state.line_visible)
+
+    # def _update_xerr_visible(self, *args):
+    #     self.ui.combosel_xerr_att.setEnabled(self.layer_state.xerr_visible)
+
+    # def _update_yerr_visible(self, *args):
+    #     self.ui.combosel_yerr_att.setEnabled(self.layer_state.yerr_visible)
+
+    # def _update_vectors_visible(self, *args):
+    #     self.ui.combosel_vector_mode.setEnabled(self.layer_state.vector_visible)
+    #     self.ui.combosel_vx_att.setEnabled(self.layer_state.vector_visible)
+    #     self.ui.combosel_vy_att.setEnabled(self.layer_state.vector_visible)
+    #     self.ui.value_vector_scaling.setEnabled(self.layer_state.vector_visible)
+    #     self.ui.combosel_vector_origin.setEnabled(self.layer_state.vector_visible)
+    #     self.ui.bool_vector_arrowhead.setEnabled(self.layer_state.vector_visible)
+
+    # def _update_vector_mode(self, vector_mode=None):
+    #     if self.layer_state.vector_mode == 'Cartesian':
+    #         self.ui.label_vector_x.setText('vx')
+    #         self.ui.label_vector_y.setText('vy')
+    #     elif self.layer_state.vector_mode == 'Polar':
+    #         self.ui.label_vector_x.setText('angle (deg)')
+    #         self.ui.label_vector_y.setText('length')
+
+    def _update_cmap_mode(self, cmap_mode=None):
+
+        if self.layer_state.cmap_mode == 'Fixed':
+            self.ui.label_cmap_attribute.hide()
+            self.ui.combosel_cmap_att.hide()
+            self.ui.label_cmap_limits.hide()
+            self.ui.valuetext_cmap_vmin.hide()
+            self.ui.valuetext_cmap_vmax.hide()
+            self.ui.button_flip_cmap.hide()
+            self.ui.combodata_cmap.hide()
+            self.ui.label_colormap.hide()
+            self.ui.color_color.show()
+        else:
+            self.ui.label_cmap_attribute.show()
+            self.ui.combosel_cmap_att.show()
+            self.ui.label_cmap_limits.show()
+            self.ui.valuetext_cmap_vmin.show()
+            self.ui.valuetext_cmap_vmax.show()
+            self.ui.button_flip_cmap.show()
+            self.ui.combodata_cmap.show()
+            self.ui.label_colormap.show()
+            self.ui.color_color.hide()
+
 
 
 from glue.config import viewer_tool
@@ -491,7 +793,7 @@ class TutorialDataViewer(MatplotlibDataViewer):
     _tool = MyCustomButton
     _layer_style_widget_cls = TutorialLayerStyleEditor
 
-    tools = ['select:rectangle', 'select:pick']
+    tools = ['select:rectangle',  'select:xrange', 'select:yrange', 'select:pick'] ### rectangle in the future?
 
     def __init__(self, *args, **kwargs):
         super(TutorialDataViewer, self).__init__(*args, **kwargs)
@@ -499,18 +801,292 @@ class TutorialDataViewer(MatplotlibDataViewer):
         # self.state.add_callback('_layout', self._update_limits)
         # self._update_limits()
 
-    # def initialize_toolbar(self):
-    #     super(TutorialDataViewer, self).initialize_toolbar()
 
-    # def on_move(mode):
-    #     if mode._drag:
-    #         self.apply_roi(mode.roi())
-    #
-    # self.toolbar.tools['select:pick']._move_callback = on_move
 
-    # def close(self, *args, **kwargs):
-    #     self.toolbar.tools['select:pick']._move_callback = None
-    #     super(TutorialDataViewer, self).close(*args, **kwargs)
+    def initialize_toolbar(self):
+
+        super(TutorialDataViewer, self).initialize_toolbar()
+
+        def on_move(mode):
+            if mode._drag:
+                self.apply_roi(mode.roi())
+
+        self.toolbar.tools['select:pick']._press_callback = on_move
+
+    def close(self, *args, **kwargs):
+        self.toolbar.tools['select:pick']._press_callback = None
+        super(TutorialDataViewer, self).close(*args, **kwargs)
+
+    @messagebox_on_error('Failed to add data')
+    def add_data(self, data):
+        if data.ndim != 1:
+            raise IncompatibleDataException("Only 1-D data can be added to "
+                                            "the dendrogram viewer (tried to add a {}-D "
+                                            "dataset)".format(data.ndim))
+        return super(TutorialDataViewer, self).add_data(data)
+
+    # TODO: move some of the ROI stuff to state class?
+
+    @defer_draw
+    def apply_roi(self, roi, override_mode=None):
+
+        # Force redraw to get rid of ROI. We do this because applying the
+        # subset state below might end up not having an effect on the viewer,
+        # for example there may not be any layers, or the active subset may not
+        # be one of the layers. So we just explicitly redraw here to make sure
+        # a redraw will happen after this method is called.
+        self.redraw()
+
+        # TODO Does subset get applied to all data or just visible data?
+
+        # if self.state._layout is None:
+        #     return
+
+        if self.state.x_att is None or self.state.y_att is None:
+            return
+
+        if not roi.defined():
+            return
+
+        if len(self.layers) == 0:
+            return
+
+        if isinstance(roi, PointROI):
+
+            x, y = roi.x, roi.y
+
+            # calculate everything
+            parent = self.state.layers_data[0][self.state.x_att]
+            ys = self.state.layers_data[0][self.state.y_att]
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = ys[parent]
+            parent_ys[0] = ys[0]
+
+            # sort everything
+            sort_by_array = self.state.layers_data[0][self.state.sort_by]
+            parent, ys, iter_array_updated = sort1Darrays(parent, ys, sort_by_array)
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = parent_ys[np.asarray(iter_array_updated, dtype = np.int)]
+
+            orientation = self.state.orientation
+
+            if orientation in ['bottom-up', 'top-down']:
+                delt = np.abs(x - xs)
+                delt[y > ys] = np.nan
+                delt[y < parent_ys] = np.nan
+            elif orientation in ['left-right', 'right-left']:
+                delt = np.abs(y - xs)
+                delt[x > ys] = np.nan
+                delt[x < parent_ys] = np.nan
+
+            if np.isfinite(delt).any():
+                select = np.nanargmin(delt)
+
+                if self.state.select_substruct:
+                    #leafness = calculate_leafness(parent)
+                    subtree = calculate_subtree(parent, leafness)
+                    select = np.concatenate([[int(select)],
+                                             np.asarray(subtree[select], dtype = np.int)])
+                select = np.asarray(select, dtype=np.int)
+            else:
+                select = np.array([], dtype=np.int)
+
+            select = iter_array_updated[select]
+            subset_state = CategorySubsetState(self.state.layers_data[0].components[0], select)
+
+            self.apply_subset_state(subset_state)
+
+        elif isinstance(roi, RectangularROI):
+
+            xmin, xmax = roi.xmin, roi.xmax
+            ymin, ymax = roi.ymin, roi.ymax
+
+
+            # calculate everything
+            parent = self.state.layers_data[0][self.state.x_att]
+            ys = self.state.layers_data[0][self.state.y_att]
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = ys[parent]
+            parent_ys[0] = ys[0]
+
+            # sort everything
+            sort_by_array = self.state.layers_data[0][self.state.sort_by]
+            parent, ys, iter_array_updated = sort1Darrays(parent, ys, sort_by_array)
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = parent_ys[np.asarray(iter_array_updated, dtype = np.int)]
+
+            orientation = self.state.orientation
+
+            if orientation in ['bottom-up', 'top-down']:
+                delt = np.arange(len(xs), dtype = np.float)
+                delt[xs < xmin] = np.nan
+                delt[xs > xmax] = np.nan
+                delt[ymin > ys] = np.nan
+                delt[ymax < parent_ys] = np.nan
+            elif orientation in ['left-right', 'right-left']:
+                delt = np.arange(len(xs), dtype = np.float)
+                delt[xs < ymin] = np.nan
+                delt[xs > ymax] = np.nan
+                delt[xmin > ys] = np.nan
+                delt[xmax < parent_ys] = np.nan
+
+            if np.isfinite(delt).any():
+                select = np.where(np.isfinite(delt))[0]
+
+                if self.state.select_substruct:
+
+                    subtree = calculate_subtree(parent, leafness)
+
+                    for sl in select:
+
+                        select = np.concatenate([select,
+                                                 np.asarray(subtree[sl], dtype = np.int)])
+
+                select = np.asarray(select, dtype=np.int)
+            else:
+                select = np.array([], dtype=np.int)
+
+            select = iter_array_updated[select]
+            subset_state = CategorySubsetState(self.state.layers_data[0].components[0], select)
+
+            self.apply_subset_state(subset_state)
+
+
+
+        elif isinstance(roi, XRangeROI):
+
+            xmin, xmax = roi.min, roi.max
+
+
+            # calculate everything
+            parent = self.state.layers_data[0][self.state.x_att]
+            ys = self.state.layers_data[0][self.state.y_att]
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = ys[parent]
+            parent_ys[0] = ys[0]
+
+            # sort everything
+            sort_by_array = self.state.layers_data[0][self.state.sort_by]
+            parent, ys, iter_array_updated = sort1Darrays(parent, ys, sort_by_array)
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = parent_ys[np.asarray(iter_array_updated, dtype = np.int)]
+
+            orientation = self.state.orientation
+
+            if orientation in ['bottom-up', 'top-down']:
+                delt = np.arange(len(xs), dtype = np.float)
+                delt[xs < xmin] = np.nan
+                delt[xs > xmax] = np.nan
+            elif orientation in ['left-right', 'right-left']:
+                delt = np.arange(len(xs), dtype = np.float)
+                delt[xmin > ys] = np.nan
+                delt[xmax < parent_ys] = np.nan
+
+            if np.isfinite(delt).any():
+                select = np.where(np.isfinite(delt))[0]
+
+                if self.state.select_substruct:
+
+                    subtree = calculate_subtree(parent, leafness)
+
+                    for sl in select:
+
+                        select = np.concatenate([select,
+                                                 np.asarray(subtree[sl], dtype = np.int)])
+
+                select = np.asarray(select, dtype=np.int)
+            else:
+                select = np.array([], dtype=np.int)
+
+            select = iter_array_updated[select]
+            subset_state = CategorySubsetState(self.state.layers_data[0].components[0], select)
+
+            self.apply_subset_state(subset_state)
+
+
+
+        elif isinstance(roi, YRangeROI):
+
+            ymin, ymax = roi.min, roi.max
+
+
+            # calculate everything
+            parent = self.state.layers_data[0][self.state.x_att]
+            ys = self.state.layers_data[0][self.state.y_att]
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = ys[parent]
+            parent_ys[0] = ys[0]
+
+            # sort everything
+            sort_by_array = self.state.layers_data[0][self.state.sort_by]
+            parent, ys, iter_array_updated = sort1Darrays(parent, ys, sort_by_array)
+            leafness = calculate_leafness(parent)
+            children = calculate_children(parent, leafness)
+            xs = calculate_xpos(parent, leafness, children)
+            parent_ys = parent_ys[np.asarray(iter_array_updated, dtype = np.int)]
+
+            orientation = self.state.orientation
+
+            if orientation in ['bottom-up', 'top-down']:
+                delt = np.arange(len(xs), dtype = np.float)
+                delt[ymin > ys] = np.nan
+                delt[ymax < parent_ys] = np.nan
+            elif orientation in ['left-right', 'right-left']:
+                delt = np.arange(len(xs), dtype = np.float)
+                delt[xs < ymin] = np.nan
+                delt[xs > ymax] = np.nan
+
+            if np.isfinite(delt).any():
+                select = np.where(np.isfinite(delt))[0]
+
+                if self.state.select_substruct:
+
+                    subtree = calculate_subtree(parent, leafness)
+
+                    for sl in select:
+
+                        select = np.concatenate([select,
+                                                 np.asarray(subtree[sl], dtype = np.int)])
+
+                select = np.asarray(select, dtype=np.int)
+            else:
+                select = np.array([], dtype=np.int)
+
+            select = iter_array_updated[select]
+            subset_state = CategorySubsetState(self.state.layers_data[0].components[0], select)
+
+            self.apply_subset_state(subset_state)
+
+
+
+
+        else:
+
+            raise TypeError("Only PointROI selections are supported")
+
+
+    @staticmethod
+    def update_viewer_state(rec, context):
+        return update_dendrogram_viewer_state(rec, context)
+
+
+
+
+
 
 
 qt_client.add(TutorialDataViewer)

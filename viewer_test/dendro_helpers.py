@@ -202,6 +202,35 @@ def sort1Darrays(parent, height, sortby_array):
             continue
 
     # parent_updated = parent[iter_array_updated]
-    height_updated = height[iter_array_updated]
+    height_updated = height[np.asarray(iter_array_updated, dtype = np.int)]
 
-    return parent_updated, height_updated
+    return parent_updated, height_updated, iter_array_updated
+
+
+'''
+Below is the function(s) taken from the old dendroviewer to help selection.
+'''
+
+def _substructures(parent, idx):
+    """
+    Return an array of all substructure indices of a given index.
+    The input is included in the output.
+    Parameters
+    ----------
+    idx : int
+        The structure to extract.
+    Returns
+    -------
+    array
+    """
+    children = _dendro_children(parent)
+    result = []
+    if np.isscalar(idx):
+        todo = [idx]
+    else:
+        todo = idx.tolist()
+
+    while todo:
+        result.append(todo.pop())
+        todo.extend(children[result[-1]])
+    return np.array(result, dtype=np.int)
