@@ -2,41 +2,63 @@ import numpy as np
 
 from matplotlib.collections import LineCollection
 
+'''
+Notes.
+* The functions below assume the 1D arrays are derived from the data factory.
+'''
+
 
 def dendro_layout(parent, height, orientation='bottom-up'):
-    """
-    Summarizing functions that outputs the line collectionself.
-    """
+    '''
+    Calculates the line coordinates.
 
+    The function wraps around several other functions in this file.
+    '''
+
+    # calculate leafness (needed as input below)
     leafness = calculate_leafness(parent)
+    # calculate children (needed as input below)
     children = calculate_children(parent, leafness)
 
+    # calculate the x-position
     xpos = calculate_xpos(parent, leafness, children)
+    # calculate the list of coordinates that can be used by LineCollection
     verts, verts_horiz = calculate_verts(parent, height, leafness, xpos,
                                          orientation=orientation)
 
-    # line_collection = LineCollection(verts,
-    #                                  colors = 'k',
-    #                                  linestyle = 'solid')
 
-    # return line_collection
     return verts, verts_horiz
-    # return xpos, height
 
 
 def calculate_leafness(parent):
+    '''
+    Calculates whether structures are leaves or branches.
+    '''
+
     leafness = []
 
     for idx in range(len(parent)):
+        # A structure is a leaf if its parent has an id (index)
+        # larger than the parent of the next structure.
         if idx != (len(parent) - 1):
+
             leafness.append('leaf' if (parent[idx] >= parent[idx + 1]) else 'branch')
+
         else:
+            ## The last structure is always a leaf.
             leafness.append('leaf')
 
     return leafness
 
 
 def calculate_nleaf(parent):
+    '''
+    Calculate the total number of leaves.
+
+    The result is used for looping through the leaves in the calculation of
+    the x-positions.
+    '''
+
     leafness = calculate_leafness(parent)
     leafness = np.asarray(leafness)
 
@@ -44,11 +66,16 @@ def calculate_nleaf(parent):
 
 
 def calculate_children(parent, leafness):
+    '''
+    Calculate the (direct) children of each structure.
+    '''
+
     children = []
 
     iter_array = np.array(range(len(parent)))
 
     for idx in iter_array:
+        # Does the calculation only for the branches.
         if leafness[idx] == 'branch':
             child = iter_array[(parent == idx)]
         else:
@@ -60,6 +87,12 @@ def calculate_children(parent, leafness):
 
 
 def calculate_subtree(parent, leafness):
+    '''
+    Calculate the full subtree of each structure.
+
+    The output is used for sorting to move subtrees together with their parents.
+    '''
+
     subtree = []
     iter_array = np.array(range(len(parent)))
     nlevels = len(set(parent))
@@ -84,6 +117,13 @@ def calculate_subtree(parent, leafness):
 
 
 def calculate_xpos(parent, leafness, children):
+    '''
+    Calculate the x-positions of the structures.
+
+    The output from this function is used to calculate the coordinates of the line segments.
+    '''
+
+
     x_pos = np.zeros(len(parent))
     iter_array = np.array(range(len(parent)))
 
@@ -113,6 +153,12 @@ def calculate_xpos(parent, leafness, children):
 
 
 def calculate_verts(parent, height, leafness, x_pos, orientation='bottom-up'):
+    '''
+    Calculate the coordinates of the line segments used by LineCollection.
+
+    The output is a list of 2 by 2 array, corresponding to the starting and end points.
+    '''
+
     verts = []
     iter_array = np.array(range(len(parent)))
 
@@ -167,7 +213,9 @@ def calculate_verts(parent, height, leafness, x_pos, orientation='bottom-up'):
 
 
 def sort1Darrays(parent, height, sortby_array):
-    # sortby_array = height
+    '''
+    Sorts array according to `sortby_array`.
+    '''
 
     if sortby_array is None:
         return parent, height
@@ -205,32 +253,3 @@ def sort1Darrays(parent, height, sortby_array):
     height_updated = height[np.asarray(iter_array_updated, dtype = np.int)]
 
     return parent_updated, height_updated, iter_array_updated
-
-
-'''
-Below is the function(s) taken from the old dendroviewer to help selection.
-'''
-
-def _substructures(parent, idx):
-    """
-    Return an array of all substructure indices of a given index.
-    The input is included in the output.
-    Parameters
-    ----------
-    idx : int
-        The structure to extract.
-    Returns
-    -------
-    array
-    """
-    children = _dendro_children(parent)
-    result = []
-    if np.isscalar(idx):
-        todo = [idx]
-    else:
-        todo = idx.tolist()
-
-    while todo:
-        result.append(todo.pop())
-        todo.extend(children[result[-1]])
-    return np.array(result, dtype=np.int)

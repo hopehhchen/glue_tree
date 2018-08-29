@@ -6,6 +6,8 @@ import numpy as np
 from matplotlib.collections import LineCollection
 import matplotlib.cm as cm
 import matplotlib.colors as mplcolors
+from glue.config import viewer_tool
+from glue.viewers.common.qt.tool import CheckableTool
 
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QButtonGroup, QRadioButton, QHBoxLayout
 
@@ -32,7 +34,6 @@ from glue.utils import defer_draw
 from dendro_helpers import (dendro_layout,
                             calculate_nleaf,
                             sort1Darrays,
-                            _substructures,
                             calculate_leafness,
                             calculate_children,
                             calculate_subtree,
@@ -44,8 +45,6 @@ from glue.core.exceptions import IncompatibleDataException
 from glue.core.subset import Subset
 
 from glue.plugins.dendro_viewer.compat import update_dendrogram_viewer_state
-
-
 
 CMAP_PROPERTIES = set(['cmap_mode', 'cmap_att', 'cmap_vmin', 'cmap_vmax', 'cmap'])
 DATA_PROPERTIES = set(['layer', 'x_att', 'y_att', 'cmap_mode'])
@@ -190,6 +189,7 @@ class TutorialViewerState(MatplotlibDataViewerState):
 
 
     def __init__(self, *args, **kwargs):
+        # provides dropdown, parent, height etc. for plot options
         super(TutorialViewerState, self).__init__(*args, **kwargs)
         self._x_att_helper = ComponentIDComboHelper(self, 'x_att')
         self._y_att_helper = ComponentIDComboHelper(self, 'y_att')
@@ -202,11 +202,13 @@ class TutorialViewerState(MatplotlibDataViewerState):
         self.add_callback('sort_by', self._on_attribute_change)
 
     def _on_layers_change(self, value):
+        # populates attributes
         self._x_att_helper.set_multiple_data(self.layers_data)
         self._y_att_helper.set_multiple_data(self.layers_data)
 
     def _on_attribute_change(self, value):
         if self.y_att is not None:
+            # used for labels and axes depedning on orientation
 
             if (self.orientation == 'bottom-up') or (self.orientation == 'top-down'):
                 self.x_axislabel = ''
@@ -216,9 +218,9 @@ class TutorialViewerState(MatplotlibDataViewerState):
                 self.y_axislabel = ''
 
 
-
-
 class TutorialLayerState(MatplotlibLayerState):
+
+    # cmap is stuff used for colormap
 
     linewidth = CallbackProperty(1, docstring='line width')
     cmap_mode = DDSCProperty(docstring="Whether to use color to encode an attribute")
@@ -230,19 +232,30 @@ class TutorialLayerState(MatplotlibLayerState):
     def __init__(self, viewer_state=None, layer=None, **kwargs):
         super(TutorialLayerState, self).__init__(viewer_state=viewer_state, layer=layer)
 
+        # set choices basically poplutes drop down menus
+
         TutorialLayerState.cmap_mode.set_choices(self, ['Fixed', 'Linear'])
 
         self.cmap_att_helper = ComponentIDComboHelper(self, 'cmap_att',
                                                       numeric = True, categorical = False)
         self.add_callback('layer', self._on_layers_change)
+
+        # kind of initializing. not having this line
+        # made errors for cmap initialization- didn't pull
+        # up linear part
+        # thanks tom
         self._on_layers_change()
 
     def _on_layers_change(self, layer=None):
 
+        # not exactly sure of this
         with delay_callback(self, 'cmap_vmin', 'cmap_vmax'):
 
             self.cmap_att_helper.set_multiple_data([self.layer])
-
+            # not having this line threw None resulting in an error- can't
+            # iterate over None....
+            # this initializes some colormap
+            # thanks tom
             self.cmap = colormaps.members[0][1]
 
 
@@ -276,7 +289,6 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self._viewer_state.add_callback('sort_by', self._on_attribute_change)
 
 
-
     def _on_visual_change(self, value=None):
 
         # parent
@@ -285,6 +297,7 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         y = self.state.layer.data[self._viewer_state.y_att]
         if len(self.state.layer[self._viewer_state.x_att]) == 0:
             return
+
         orientation = self._viewer_state.orientation
         sort_by_array = self.state.layer.data[self._viewer_state.sort_by]
         x, y, iter_array_updated = sort1Darrays(x, y, sort_by_array)
@@ -314,11 +327,9 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
 
             cmap = color_code_cmap
             normalize = mplcolors.Normalize(color_code_vmin, color_code_vmax)
-
-            print(cmap, color_code_vmin, color_code_vmax, color_code_by)
-
             colors = [cmap(normalize(yi)) for yi in color_code_by]
             colors_horiz = []
+            
             for i in range(len(verts_horiz)):
                 colors_horiz.append((0., 0., 0., 1.))
 
@@ -327,13 +338,14 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self.lc.set_color(colors_final)
 
 
-        ## linewidth
+        # linewidth
         self.lc.set_linewidth(self.state.linewidth)
         # self.artist.set_markeredgecolor(self.state.color)
         # if self.state.fill:
         #     self.artist.set_markerfacecolor(self.state.color)
         # else:
         #     self.artist.set_markerfacecolor('white')
+        # opacity
         self.artist.set_alpha(self.state.alpha)
 
         self.redraw()
@@ -435,6 +447,8 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
         self.axes.set_xscale('linear')
         self.axes.set_yscale('linear')
 
+        # handling all 4 orientations
+
         if orientation == 'bottom-up':
             self.axes.set_xlim(xmin, xmax)
             self.axes.set_ylim(ymin, ymax)
@@ -453,7 +467,6 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
             self.axes.spines['right'].set_visible(True)
 
             # if y_log:
-            #
             #     self.axes.set_yscale('log')
 
         elif orientation == 'top-down':
@@ -474,7 +487,6 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
             self.axes.spines['right'].set_visible(True)
 
             # if y_log:
-            #
             #     self.axes.set_yscale('log')
 
         elif orientation == 'left-right':
@@ -495,7 +507,6 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
             self.axes.spines['right'].set_visible(False)
 
             # if y_log:
-            #
             #     self.axes.set_xscale('log')
 
         elif orientation == 'right-left':
@@ -516,7 +527,6 @@ class TutorialLayerArtist(MatplotlibLayerArtist):
             self.axes.spines['right'].set_visible(False)
 
             # if y_log:
-            #
             #     self.axes.set_xscale('log')
 
 
@@ -543,45 +553,12 @@ class TutorialLayerStateWidget(QWidget):
 
     def __init__(self, layer_artist):
         super(TutorialLayerStateWidget, self).__init__()
-
-        # was experimenting with radio buttons
-        # for orientation. doesn't work
-        # keeping it here for a while for future reference
-
-        # layout = QVBoxLayout()
-        #
-        # widget = QWidget(self)  # central widget
-        # widget.setLayout(layout)
-        #
-        # self.orientation_radio = QButtonGroup(widget)
-        #
-        # self.horizontal_radio = QRadioButton("Horizontal")
-        # self.orientation_radio.addButton(self.horizontal_radio)
-        # self.vertical_radio = QRadioButton("Vertical")
-        # self.vertical_radio.setChecked(True)
-        # self.orientation_radio.addButton(self.vertical_radio)
-        # layout.addWidget(self.horizontal_radio)
-        # layout.addWidget(self.vertical_radio)
-
-        self.checkbox = QCheckBox('Orientation')
-        layout = QVBoxLayout()
-        layout.addWidget(self.checkbox)
+        
         self.setLayout(layout)
-
         self.layer_state = layer_artist.state
 
 
 class TutorialLayerStyleEditor(QWidget):
-
-    # def __init__(self, layer, parent=None):
-    #     super(TutorialLayerStyleEditor, self).__init__(parent=parent)
-
-    #     self.ui = load_ui('layer_style_editor.ui', self,
-    #                       directory=os.path.dirname(__file__))
-
-    #     connect_kwargs = {'alpha': dict(value_range=(0, 1))}
-
-    #     autoconnect_callbacks_to_qt(layer.state, self.ui, connect_kwargs)
 
     def __init__(self, layer, parent=None):
 
@@ -602,30 +579,9 @@ class TutorialLayerStyleEditor(QWidget):
         fix_tab_widget_fontsize(self.ui.tab_widget)
 
         self.layer_state = layer.state
-
-        # self.layer_state.add_callback('markers_visible', self._update_markers_visible)
-        # self.layer_state.add_callback('line_visible', self._update_line_visible)
-        # self.layer_state.add_callback('xerr_visible', self._update_xerr_visible)
-        # self.layer_state.add_callback('yerr_visible', self._update_yerr_visible)
-        # self.layer_state.add_callback('vector_visible', self._update_vectors_visible)
-
         self.layer_state.add_callback('cmap_mode', self._update_cmap_mode)
-        # self.layer_state.add_callback('size_mode', self._update_size_mode)
-        # self.layer_state.add_callback('vector_mode', self._update_vector_mode)
-
-        # self.layer_state.add_callback('density_map', self._update_size_mode)
-        # self.layer_state.add_callback('density_map', self._update_warnings)
-
         self.layer_state.add_callback('layer', self._update_warnings)
 
-        # self._update_markers_visible()
-        # self._update_line_visible()
-        # self._update_xerr_visible()
-        # self._update_yerr_visible()
-        # self._update_vectors_visible()
-
-        # self._update_size_mode()
-        # self._update_vector_mode()
         self._update_cmap_mode()
 
         self._update_warnings()
@@ -655,82 +611,11 @@ class TutorialLayerStyleEditor(QWidget):
                             combo.setItemText(item, text.replace(warning, ''))
                             combo.setItemData(item, QtGui.QBrush(), Qt.TextColorRole)
 
-        # if n_points > 10000:
-        #     self.ui.label_warning_errorbar.show()
-        # else:
-        #     self.ui.label_warning_errorbar.hide()
-
-        # if n_points > 10000:
-        #     self.ui.label_warning_vector.show()
-        # else:
-        #     self.ui.label_warning_vector.hide()
-
-    # def _update_size_mode(self, size_mode=None):
-
-    #     visible = not self.layer_state.density_map and not self.layer_state.size_mode == 'Fixed'
-    #     self.ui.label_size_attribute.setVisible(visible)
-    #     self.ui.combosel_size_att.setVisible(visible)
-    #     self.ui.label_size_limits.setVisible(visible)
-    #     self.ui.valuetext_size_vmin.setVisible(visible)
-    #     self.ui.valuetext_size_vmax.setVisible(visible)
-    #     self.ui.button_flip_size.setVisible(visible)
-
-    #     visible = not self.layer_state.density_map and self.layer_state.size_mode == 'Fixed'
-    #     self.ui.value_size.setVisible(visible)
-
-    #     density = self.layer_state.density_map
-    #     # self.ui.value_dpi.setVisible(density)
-    #     # self.ui.label_dpi.setVisible(density)
-    #     self.ui.label_stretch.setVisible(density)
-    #     self.ui.combosel_stretch.setVisible(density)
-    #     self.ui.value_density_contrast.setVisible(density)
-    #     self.ui.label_contrast.setVisible(density)
-    #     self.ui.combosel_size_mode.setVisible(not density)
-    #     self.ui.value_size_scaling.setVisible(not density)
-    #     self.ui.label_size_mode.setVisible(not density)
-    #     self.ui.label_size_scaling.setVisible(not density)
-    #     self.ui.label_fill.setVisible(not density)
-    #     self.ui.bool_fill.setVisible(not density)
-
-    # def _update_markers_visible(self, *args):
-    #     self.ui.combosel_size_mode.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.value_size.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.combosel_size_att.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.valuetext_size_vmin.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.valuetext_size_vmax.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.button_flip_size.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.value_size_scaling.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.value_dpi.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.combosel_stretch.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.label_size_scaling.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.combosel_points_mode.setEnabled(self.layer_state.markers_visible)
-    #     self.ui.value_density_contrast.setEnabled(self.layer_state.markers_visible)
 
     def _update_line_visible(self, *args):
         self.ui.value_linewidth.setEnabled(self.layer_state.line_visible)
         self.ui.combosel_linestyle.setEnabled(self.layer_state.line_visible)
 
-    # def _update_xerr_visible(self, *args):
-    #     self.ui.combosel_xerr_att.setEnabled(self.layer_state.xerr_visible)
-
-    # def _update_yerr_visible(self, *args):
-    #     self.ui.combosel_yerr_att.setEnabled(self.layer_state.yerr_visible)
-
-    # def _update_vectors_visible(self, *args):
-    #     self.ui.combosel_vector_mode.setEnabled(self.layer_state.vector_visible)
-    #     self.ui.combosel_vx_att.setEnabled(self.layer_state.vector_visible)
-    #     self.ui.combosel_vy_att.setEnabled(self.layer_state.vector_visible)
-    #     self.ui.value_vector_scaling.setEnabled(self.layer_state.vector_visible)
-    #     self.ui.combosel_vector_origin.setEnabled(self.layer_state.vector_visible)
-    #     self.ui.bool_vector_arrowhead.setEnabled(self.layer_state.vector_visible)
-
-    # def _update_vector_mode(self, vector_mode=None):
-    #     if self.layer_state.vector_mode == 'Cartesian':
-    #         self.ui.label_vector_x.setText('vx')
-    #         self.ui.label_vector_y.setText('vy')
-    #     elif self.layer_state.vector_mode == 'Polar':
-    #         self.ui.label_vector_x.setText('angle (deg)')
-    #         self.ui.label_vector_y.setText('length')
 
     def _update_cmap_mode(self, cmap_mode=None):
 
@@ -756,33 +641,6 @@ class TutorialLayerStyleEditor(QWidget):
             self.ui.color_color.hide()
 
 
-
-from glue.config import viewer_tool
-from glue.viewers.common.qt.tool import CheckableTool
-
-
-@viewer_tool
-class MyCustomButton(CheckableTool):
-    icon = 'myicon.png'
-    tool_id = 'custom_tool'
-    action_text = 'Does cool stuff'
-    tool_tip = 'Does cool stuff'
-    status_tip = 'Instructions on what to do now'
-    shortcut = 'D'
-
-    def __init__(self, viewer):
-        super(MyCustomMode, self).__init__(viewer)
-
-    def activate(self):
-        pass
-
-    def deactivate(self):
-        pass
-
-    def close(self):
-        pass
-
-
 class TutorialDataViewer(MatplotlibDataViewer):
     LABEL = 'Tree Viewer'
     _state_cls = TutorialViewerState
@@ -790,7 +648,6 @@ class TutorialDataViewer(MatplotlibDataViewer):
     _layer_style_widget_cls = TutorialLayerStateWidget
     _data_artist_cls = TutorialLayerArtist
     _subset_artist_cls = TutorialLayerArtist
-    _tool = MyCustomButton
     _layer_style_widget_cls = TutorialLayerStyleEditor
 
     tools = ['select:rectangle',  'select:xrange', 'select:yrange', 'select:pick'] ### rectangle in the future?
@@ -800,7 +657,6 @@ class TutorialDataViewer(MatplotlibDataViewer):
 
         # self.state.add_callback('_layout', self._update_limits)
         # self._update_limits()
-
 
 
     def initialize_toolbar(self):
@@ -965,7 +821,6 @@ class TutorialDataViewer(MatplotlibDataViewer):
 
             xmin, xmax = roi.min, roi.max
 
-
             # calculate everything
             parent = self.state.layers_data[0][self.state.x_att]
             ys = self.state.layers_data[0][self.state.y_att]
@@ -1021,7 +876,6 @@ class TutorialDataViewer(MatplotlibDataViewer):
 
             ymin, ymax = roi.min, roi.max
 
-
             # calculate everything
             parent = self.state.layers_data[0][self.state.x_att]
             ys = self.state.layers_data[0][self.state.y_att]
@@ -1070,23 +924,13 @@ class TutorialDataViewer(MatplotlibDataViewer):
             subset_state = CategorySubsetState(self.state.layers_data[0].components[0], select)
 
             self.apply_subset_state(subset_state)
-
-
-
-
         else:
-
             raise TypeError("Only PointROI selections are supported")
 
 
     @staticmethod
     def update_viewer_state(rec, context):
         return update_dendrogram_viewer_state(rec, context)
-
-
-
-
-
 
 
 qt_client.add(TutorialDataViewer)
