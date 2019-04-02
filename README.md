@@ -2,14 +2,9 @@
 A developer version of a tree viewer in glue.  The goal of this project is to create a viewer that is compatible to generic dendrograms and tree diagrams, as well as other network plots.
 
 ## Roadmap
-* Re-test the functionalities.  Evaluate the most urgent task to make the viewer a presentable example.
-* Test the viewer on real medical data.
 * Make the viewer compatible with data created by `astrodendro`.
-
-## To-do in details
-* Add rotation options and refactor existing code.
-* Linking & Brushing.
-* Change colors according to the subset.
+* Cross-compare with the current dendrogram viewer and fill in the functionality of the dendrogram viewer.
+* Test the viewer on real medical data.
 
 ### Contact
 Hope Chen, hopechen@utexas.edu
