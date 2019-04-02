@@ -1,12 +1,18 @@
 # glue_tree
-The repo is a forked version of the original created by [@chaityacshah](https://github.com/chaityacshah).  It is intended for testing and developing.
+A developer version of a tree viewer in glue.  The goal of this project is to create a viewer that is compatible to generic dendrograms and tree diagrams, as well as other network plots.
 
-## Progress
-* July 31, 2018: Preliminary codes for plotting the tree from 1D arrays generated from a Newick file.
-* August 6, 2018: Basic working tree viewer with an option to rotate.
-* August 26-29, 2018: Color coding/Brushing/Sorting done.
+## Roadmap
+* Re-test the functionalities.  Evaluate the most urgent task to make the viewer a presentable example.
+* Test the viewer on real medical data.
+* Make the viewer compatible with data created by `astrodendro`.
 
-## To-do/to-discuss
+## To-do in details
 * Add rotation options and refactor existing code.
 * Linking & Brushing.
 * Change colors according to the subset.
+
+### Contact
+Hope Chen, hopechen@utexas.edu
+
+### Disclaimer
+The repo was original from [@chaityacshah](https://github.com/chaityacshah), who is no longer active on this project.
